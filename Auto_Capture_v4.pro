@@ -1,4 +1,4 @@
-QT       += core gui
+QT       += core gui network
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -15,12 +15,27 @@ DEFINES += QT_DEPRECATED_WARNINGS
 # You can also select to disable deprecated APIs only up to a certain version of Qt.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
+### toml11
+INCLUDEPATH += /home/tesla/3rdparty/toml11
+
+### opencv-4.5.1
+INCLUDEPATH += /usr/local/include/opencv4
+
+LIBS += -L/usr/local/lib -lopencv_world
+
 SOURCES += \
+    config.cpp \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    tcpHandler.cpp \
+    videowatcher.cpp
 
 HEADERS += \
-    mainwindow.h
+    config.h \
+    mainwindow.h \
+    protocol.h \
+    tcpHandler.h \
+    videowatcher.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
