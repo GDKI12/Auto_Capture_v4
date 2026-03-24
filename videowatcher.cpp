@@ -193,107 +193,19 @@ void VideoWatcher::createVideo(const QString& inputDir, const QString& outputPat
         return;
     }
 
-//    const qint64 rawBytes = static_cast<qint64>(width) * height;
-//    std::vector<uchar> rawBuffer(static_cast<size_t>(rawBytes));
-
-//    for(int i = 0; i < fileList.size(); i++)
-//    {
-//        const QFileInfo& fi = fileList[i];
-//        QFile file(fi.absoluteFilePath());
-
-//        if(!file.open(QIODevice::ReadOnly))
-//        {
-//            qCritical() << "Fail to open: " << fi.absolutePath();
-//            // TODO
-//            // handle error
-//            ffmpeg.kill();
-//            ffmpeg.waitForFinished();
-//            return;
-//        }
-
-//        qint64 readBytes = file.read(reinterpret_cast<char*>(rawBuffer.data()), rawBytes);
-//        file.close();
-
-//        if(readBytes != rawBytes)
-//        {
-//            qCritical() << "Fail to read raw file : "
-//                        << fi.fileName()
-//                        << "read = " << readBytes
-//                        << "expected = " << rawBytes;
-
-//            // TODO
-//            // handle error
-//            ffmpeg.kill();
-//            ffmpeg.waitForFinished();
-//            return;
-//        }
-
-//        // 1채널 Bayer BGGR 8bit
-//        cv::Mat bayer(height, width, CV_8UC1, rawBuffer.data());
-
-//        // Bayer -> BGR
-//        cv::Mat bgr;
-//        cv::cvtColor(bayer, bgr, cv::COLOR_BayerBG2BGR);
-
-//        if (bgr.empty() || bgr.type() != CV_8UC3) {
-//            qCritical() << "BGR 변환 실패:" << fi.fileName();
-//            // TODO
-//            ffmpeg.kill();
-//            ffmpeg.waitForFinished();
-//            return;
-//        }
-
-//        if (!bgr.isContinuous()) {
-//            bgr = bgr.clone();
-//        }
-
-//        const char* dataPtr = reinterpret_cast<const char*>(bgr.data);
-//        const qint64 bytesToWrite = static_cast<qint64>(bgr.total() * bgr.elemSize());
-
-//        qint64 written = 0;
-//        while (written < bytesToWrite) {
-//            qint64 chunk = ffmpeg.write(dataPtr + written, bytesToWrite - written);
-//            if (chunk < 0) {
-//                qCritical() << "ffmpeg stdin 쓰기 실패:" << fi.fileName();
-//                // TODO
-//                // handle error
-//                ffmpeg.kill();
-//                ffmpeg.waitForFinished();
-//                return;
-//            }
-//            written += chunk;
-
-//            if (!ffmpeg.waitForBytesWritten(-1)) {
-//                qCritical() << "ffmpeg stdin flush 실패:" << fi.fileName();
-//                qCritical() << "state =" << ffmpeg.state();
-//                qCritical() << "exitCode =" << ffmpeg.exitCode();
-//                qCritical() << "error =" << ffmpeg.errorString();
-//                qCritical().noquote() << "stderr:\n" << ffmpeg.readAllStandardError();
-//                // TODO
-//                // handle error
-//                ffmpeg.kill();
-//                ffmpeg.waitForFinished();
-//                return;
-//            }
-//        }
-
-//        qInfo() << QString("프레임 %1/%2 처리 완료: %3")
-//                       .arg(i + 1)
-//                       .arg(fileList.size())
-//                       .arg(fi.fileName());
-//    }
-
-    const qint64 rawBytes = static_cast<qint64>(width) * height * 3;
+    const qint64 rawBytes = static_cast<qint64>(width) * height;
     std::vector<uchar> rawBuffer(static_cast<size_t>(rawBytes));
 
-    for (int i = 0; i < fileList.size(); i++)
+    for(int i = 0; i < fileList.size(); i++)
     {
         const QFileInfo& fi = fileList[i];
         QFile file(fi.absoluteFilePath());
 
-        if (!file.open(QIODevice::ReadOnly))
+        if(!file.open(QIODevice::ReadOnly))
         {
-            qCritical() << "Fail to open: " << fi.absoluteFilePath();
+            qCritical() << "Fail to open: " << fi.absolutePath();
+            // TODO
+            // handle error
             ffmpeg.kill();
             ffmpeg.waitForFinished();
             return;
@@ -302,30 +214,36 @@ void VideoWatcher::createVideo(const QString& inputDir, const QString& outputPat
         qint64 readBytes = file.read(reinterpret_cast<char*>(rawBuffer.data()), rawBytes);
         file.close();
 
-        if (readBytes != rawBytes)
+        if(readBytes != rawBytes)
         {
             qCritical() << "Fail to read raw file : "
                         << fi.fileName()
-                        << "read =" << readBytes
-                        << "expected =" << rawBytes;
+                        << "read = " << readBytes
+                        << "expected = " << rawBytes;
+
+            // TODO
+            // handle error
             ffmpeg.kill();
             ffmpeg.waitForFinished();
             return;
         }
 
-        // 3채널 BGR8 raw
-        cv::Mat bgr(height, width, CV_8UC3, rawBuffer.data());
+        // 1채널 Bayer BGGR 8bit
+        cv::Mat bayer(height, width, CV_8UC1, rawBuffer.data());
 
-        if (bgr.empty() || bgr.type() != CV_8UC3)
-        {
-            qCritical() << "BGR 데이터 생성 실패:" << fi.fileName();
+        // Bayer -> BGR
+        cv::Mat bgr;
+        cv::cvtColor(bayer, bgr, cv::COLOR_BayerBG2BGR);
+
+        if (bgr.empty() || bgr.type() != CV_8UC3) {
+            qCritical() << "BGR 변환 실패:" << fi.fileName();
+            // TODO
             ffmpeg.kill();
             ffmpeg.waitForFinished();
             return;
         }
 
-        if (!bgr.isContinuous())
-        {
+        if (!bgr.isContinuous()) {
             bgr = bgr.clone();
         }
 
@@ -333,25 +251,26 @@ void VideoWatcher::createVideo(const QString& inputDir, const QString& outputPat
         const qint64 bytesToWrite = static_cast<qint64>(bgr.total() * bgr.elemSize());
 
         qint64 written = 0;
-        while (written < bytesToWrite)
-        {
+        while (written < bytesToWrite) {
             qint64 chunk = ffmpeg.write(dataPtr + written, bytesToWrite - written);
-            if (chunk < 0)
-            {
+            if (chunk < 0) {
                 qCritical() << "ffmpeg stdin 쓰기 실패:" << fi.fileName();
+                // TODO
+                // handle error
                 ffmpeg.kill();
                 ffmpeg.waitForFinished();
                 return;
             }
             written += chunk;
 
-            if (!ffmpeg.waitForBytesWritten(-1))
-            {
+            if (!ffmpeg.waitForBytesWritten(-1)) {
                 qCritical() << "ffmpeg stdin flush 실패:" << fi.fileName();
                 qCritical() << "state =" << ffmpeg.state();
                 qCritical() << "exitCode =" << ffmpeg.exitCode();
                 qCritical() << "error =" << ffmpeg.errorString();
                 qCritical().noquote() << "stderr:\n" << ffmpeg.readAllStandardError();
+                // TODO
+                // handle error
                 ffmpeg.kill();
                 ffmpeg.waitForFinished();
                 return;

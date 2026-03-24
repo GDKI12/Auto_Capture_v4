@@ -1,13 +1,13 @@
 #include "camworker.h"
 #include "config.h"
 
-CamWorker::CamWorker(QObject* parent) : QObject(parent)
+CamWorker::CamWorker(QObject* parent) : QObject(parent), index1(0), index2(0), index3(0)
 {
     QMap<QString, QString> params = Config::getParmas();
 
     timeInteval = params["timeInterval"].toInt();
-    videoLength = params["videoLength"].toInt();
-    savePath = params["saveDir"].toStdString();
+    videoLength = params["videoLength"].toInt() * 10;
+    savePath = params["saveDir"];
 
     runtime = &PoshRuntime::initRuntime(APP_NAME);
 
@@ -73,7 +73,26 @@ void CamWorker::receiveGrabFrame()
 
     for(int i = 0; i < camSubscribers.size(); i++)
     {
+        if(index1 >= videoLength && index2 >= videoLength && index3 >= videoLength)
+        {
+            index1 = 0;
+            index2 = 0;
+            index3 = 0;
+            emit done();
+        }
         Subscriber<CustomCamDataType> *camSubscriber = camSubscribers[i];
+
+        if(index1 == 50)
+            std::cout << "" <<std::endl;
+
+        if(index1 >= videoLength && i == 0)
+            continue;
+
+        if(index2 >= videoLength && i == 1)
+            continue;
+
+        if(index3 >= videoLength && i == 2)
+            continue;
 
 
         auto camTakeResult = camSubscriber->take();
@@ -88,7 +107,7 @@ void CamWorker::receiveGrabFrame()
             std::cout << "=== CAM" << i+1 << "]" << APP_NAME << "[" << strTimestamp.toStdString() << "] - get value1: "
                       << QString::number(camTakeResult.value()->timestamp, 'f', 0).toStdString() << std::endl;
 
-//            QFuture<int> cycle = QtConcurrent::run(this, &CamWorker::LiveSensorFrame, this, i, curFrameNum);
+            QFuture<int> cycle = QtConcurrent::run(this, &CamWorker::saveRawFile, inputData[i], i+1);
         }
         else
         {
@@ -106,12 +125,32 @@ void CamWorker::receiveGrabFrame()
 
     }
 }
+
+
 // FLIR_BFS_PGE_32S4C_C_camera_data
-void CamWorker::saveRawFile(CustomCamDataType* data)
+int CamWorker::saveRawFile(CustomCamDataType* data, int index)
 {
+    switch (index) {
+    case 1:
+        index1++;
+        break;
+    case 2:
+        index2++;
+        break;
+    case 3:
+        index3++;
+        break;
+    default:
+        break;
+    }
+
     QString timeStamp = QString::number(data->timestamp, 'f', 0);
 
-    QString rawFileName = savePath + timeStamp + ".raw";
+    QString rootDir = savePath + "/cam" + QString::number(index) + "/";
+
+    QDir().mkpath(rootDir);
+
+    QString rawFileName = rootDir + timeStamp + ".raw";
 
     QFile file(rawFileName);
 
@@ -123,7 +162,10 @@ void CamWorker::saveRawFile(CustomCamDataType* data)
     }
 
     file.write(reinterpret_cast<const char*>(data->data), data->width * data->height);
+    std::cout << "Success to save file : " << rawFileName.toStdString() << std::endl;
     file.close();
+
+    return 0;
 }
 
 

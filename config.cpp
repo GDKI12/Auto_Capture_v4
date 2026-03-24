@@ -37,4 +37,9 @@ QMap<QString, QString> Config::getParmas()
     }
 }
 
+QString Config::getSensorListFile()
+{
+    return "/home/tesla/EdgeInfravision/EdgeInfra_Capture_v4/config/sensor_list.json";
+}
+
 

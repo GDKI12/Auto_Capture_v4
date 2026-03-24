@@ -11,6 +11,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDateTime>
+#include <QFuture>
+#include <QtConcurrent>
 #include "iceoryx_posh/popo/subscriber.hpp"
 #include "iceoryx_posh/popo/untyped_subscriber.hpp"
 #include "iceoryx_posh/runtime/posh_runtime.hpp"
@@ -27,9 +29,12 @@ class CamWorker : public QObject
 public:
     explicit CamWorker(QObject* parent = nullptr);
 
+signals:
+    void done();
+
 public slots:
     void receiveGrabFrame();
-    void saveRawFile(CustomCamDataType* data);
+    int saveRawFile(CustomCamDataType* data, int index);
 
 private:
     PoshRuntime* runtime;
@@ -41,6 +46,10 @@ private:
     int timeInteval;
     int videoLength;
     QString savePath;
+
+    int index1;
+    int index2;
+    int index3;
 };
 
 #endif // CAMWORKER_H
