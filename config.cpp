@@ -19,15 +19,15 @@ QMap<QString, QString> Config::getParmas()
         std::string rootDir = toml::find<std::string>(data, "setting", "root_dir");
         std::string saveDir = toml::find<std::string>(data, "setting", "save_path");
         std::string dstIP = toml::find<std::string>(data,"setting","dst_ip");
-        std::string convertScript = toml::find<std::string>(data, "setting", "convert_script");
-        std::string encodeScript = toml::find<std::string>(data, "setting", "encode_script");
+        int timeInteval = toml::find<int>(data, "setting", "time_inteval");
+        int videoLength = toml::find<int>(data, "setting", "video_length");
         int dstPort = toml::find<int>(data, "setting", "dst_port");
 
         params.insert("rootDir", QString::fromStdString(rootDir));
         params.insert("saveDir", QString::fromStdString(saveDir));
         params.insert("dstIP", QString::fromStdString(dstIP));
-        params.insert("convScript", QString::fromStdString(convertScript));
-        params.insert("encodeScript", QString::fromStdString(encodeScript));
+        params.insert("videoLength", QString::number(timeInteval));
+        params.insert("timeInterval", QString::number(videoLength));
         params.insert("dstPort", QString::number(dstPort));
 
         return params;
@@ -36,3 +36,5 @@ QMap<QString, QString> Config::getParmas()
         return params;
     }
 }
+
+

@@ -4,7 +4,10 @@
 #include <QDebug>
 #include <QDir>
 #include <QProcess>
+#include <QThread>
 #include <opencv2/opencv.hpp>
+#include <QRegularExpression>
+
 VideoWatcher::VideoWatcher(QObject* parent) : QObject(parent)
 {
 
@@ -17,7 +20,7 @@ VideoWatcher& VideoWatcher::getInstance()
 
 }
 
-void VideoWatcher::setWatcher(QString path)
+void VideoWatcher::setWatcher()
 {
 
     client = new TCPHandler();
@@ -26,11 +29,10 @@ void VideoWatcher::setWatcher(QString path)
     convertProgram = params["convScript"];
     encodeProgram = params["encodeScript"];
     savePath = params["saveDir"];
-    trashPath = params["rootDir"];
+    rootPath = params["rootDir"];
 
     watcher = new QFileSystemWatcher(this);
-    rootPath = path;
-    watcher->addPath(path);
+    watcher->addPath(rootPath);
     QDir dir(rootPath);
 
     prevFolders = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
@@ -41,16 +43,44 @@ void VideoWatcher::setWatcher(QString path)
 
 bool VideoWatcher::isReady(QString rootPath)
 {
+    QDir rootDir(rootPath);
+
+    // Select Folder which start with cam
+    QStringList dirFilter;
+    dirFilter << "cam*";
+    QStringList subDirs = rootDir.entryList(dirFilter, QDir::Dirs | QDir::NoDotAndDotDot);
+
+    QStringList encFilter;
+    encFilter << "*enc";
+
+    QStringList camFolders;
+
+    for(QString cam : subDirs)
+    {
+        camFolders << rootPath + "/" + cam;
+    }
+
+    for(QString cam : camFolders)
+    {
+        QDir d(cam);
+        int cnt = d.entryList(encFilter, QDir::Files).size();
+
+        if(cnt < 100)
+            return false;
+    }
+
+
+    return true;
 
 }
 
 void VideoWatcher::dirChanged(const QString& path)
 {
+    int x = 0;
+    bool ready = false;
+
     QDir changedDir(path);
     QStringList l = changedDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-
-    QStringList rawFilter;
-    rawFilter << "*.raw" << "*.enc";
 
     if(l.size() <= prevFolders.size())
     {
@@ -63,17 +93,30 @@ void VideoWatcher::dirChanged(const QString& path)
         if(!prevFolders.contains(d))
         {
             QString addedPath = path + "/" + d;
-            QDir addedDir(addedPath);
 
-            QStringList subDirs = addedDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+            if(!isReady(addedPath))
+                return;
 
-            qDebug() << "add Dir : " << addedPath;
-            qDebug() << "sub Dir";
-            for(QString subDir : subDirs)
+            while(true)
             {
+                if(x > 5)
+                    break;
+                if(isReady(addedPath))
+                {
+                    ready = true;
+                    break;
+                }
+
+                qDebug() << "Not Ready!! Sleep for 5sec";
+
+                QThread::sleep(5);
+                x++;
+                qDebug() << "Retry " << x;
 
             }
-            process();
+
+            if(ready)
+                process();
         }
     }
 }
@@ -81,152 +124,301 @@ void VideoWatcher::dirChanged(const QString& path)
 
 void VideoWatcher::process()
 {
-    convertRAWtoPNG();
-//    qDebug() << "changed!";
+    qDebug() << "changed!";
 }
 
-void VideoWatcher::convertRAWtoPNG()
-{
-    QProcess* process = new QProcess();
-    QString program = "/home/tesla/miniconda3/envs/cscho/bin/python";
-    QStringList arguments;
-    arguments << "/home/tesla/cho/transform_source_data_and_validate_and_fix_sorce_data.py"
-              << "--source"
-              << "/home/tesla/cho/test";
-
-    process->start(program, arguments);
-
-    if(!process->waitForStarted())
-    {
-        qDebug() << "Python process start failed";
-        return;
-    }
-
-    process->waitForFinished();
-
-    QString stdoutData = process->readAllStandardOutput();
-    QString stderrData = process->readAllStandardError();
-
-    QString jsonStr = stdoutData.trimmed();
-    QJsonParseError err;
-    QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8(), &err);
-
-    QStringList pathList;
-
-    if(err.error == QJsonParseError::NoError && doc.isObject())
-    {
-        QJsonObject obj = doc.object();
-
-        for(const QString& key : obj.keys())
-            pathList << obj.value(key).toString();
-    }
-
-
-    qDebug() << "stdout: " << stdoutData;
-    qDebug() << "stderr: " << stderrData;
-
-    for(QString s : pathList)
-    {
-        createVideo(s);
-    }
-
-
-
-}
 
 // Slot : After convert raw to png
-void VideoWatcher::createVideo(QString path)
+void VideoWatcher::createVideo(const QString& inputDir, const QString& outputPath)
 {
-    QString cameraRootPath = path + "/camera";
-    QDir rootDir(cameraRootPath);
-    QStringList camFilter;
+    QDir dir(inputDir);
 
-    QString sceneName;
-    QStringList k  = path.split("/");
+    QStringList filter;
+    filter << "*.raw";
 
-    for(auto itr = k.begin(); itr != k.end(); itr++)
+    QFileInfoList fileList = dir.entryInfoList(filter, QDir::Files | QDir::Readable, QDir::Name);
+
+    const int width = 2048;
+    const int height = 1536;
+
+    // 숫자 기준 정렬
+    std::sort(fileList.begin(), fileList.end(),
+              [this](const QFileInfo& a, const QFileInfo& b) {
+
+                  int na = extractNumber(a.fileName());
+                  int nb = extractNumber(b.fileName());
+
+                  if (na >= 0 && nb >= 0 && na != nb) {
+                      return na < nb;
+                  }
+                  return a.fileName().toLower() < b.fileName().toLower();
+              });
+
+    if(fileList.isEmpty())
     {
-        if((itr+1) == k.end())
-             sceneName = *itr;
+        qCritical() << "raw files number: " << fileList.size();
     }
 
-    camFilter << "cam*";
-    QStringList camFolderList = rootDir.entryList(camFilter, QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    QProcess ffmpeg;
 
-    for(QString cam : camFolderList)
+    QString frameSize = QString("%1x%2").arg("2048").arg("1536");
+
+    QStringList args;
+    args << "-y"
+         << "-f" << "rawvideo"
+         << "-pix_fmt" << "bgr24"
+         << "-s" << frameSize
+         << "-r" << "10"
+         << "-i" << "-"
+         << "-an"
+         << "-vf" << "format=yuv420p"
+         << "-c:v" << "libx265"
+         << "-preset" << "medium"
+         << "-crf" << "28"
+         << "-tag:v" << "hvc1"
+         << "-movflags" << "+faststart"
+         << outputPath;
+
+    qInfo() << "execute ffmpeg >> ";
+
+    ffmpeg.setProgram("ffmpeg");
+    ffmpeg.setArguments(args);
+    ffmpeg.setProcessChannelMode(QProcess::SeparateChannels);
+
+    ffmpeg.start();
+
+    if(!ffmpeg.waitForStarted())
     {
-        QString pngPath = cameraRootPath + "/" + cam;
-        QDir dir(pngPath);
-        QStringList filters;
-        QString outputPath = savePath + "/" + sceneName + "_" + QString("%1Video.mp4").arg(cam);
-        filters << "*.png";
-
-        QStringList files = dir.entryList(filters, QDir::Files, QDir::Name);
-
-        if(files.isEmpty())
-        {
-            qDebug() << "No Png files found";
-            return;
-        }
-
-        QString firstImagePath = dir.filePath(files[0]);
-        cv::Mat frame = cv::imread(firstImagePath.toStdString());
-
-        int width = frame.cols;
-        int height = frame.rows;
-
-        cv::VideoWriter video(
-                    outputPath.toStdString(),
-                    cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
-                    10,
-                    cv::Size(width, height)
-                    );
-
-        if (!video.isOpened())
-        {
-            qDebug() << "Failed to open VideoWriter:" << outputPath;
-            return;
-        }
-
-        for(const QString& file : files)
-        {
-            QString path = dir.filePath(file);
-            cv::Mat img = cv::imread(path.toStdString());
-
-            if(img.empty())
-                continue;
-
-            video.write(img);
-        }
-
-        video.release();
-
-        qDebug() << "Complete Create Video!";
-        encode(outputPath);
-    }
-
-
-}
-
-
-// encoding file
-void VideoWatcher::encode(QString videoPath)
-{
-    QProcess* process = new QProcess();
-    QString program = "/bin/bash";
-    QStringList arguments;
-    arguments << "/home/tesla/cho/encode.sh"
-              << videoPath;
-
-    process->start(program, arguments);
-    if(!process->waitForStarted())
-    {
-        qDebug() << "Encode process start failed";
+        qCritical() << "fail to start ffmpeg: " << ffmpeg.errorString();
         return;
     }
 
-    process->waitForFinished();
-    qDebug() << "Complete Encode Successfully!!";
+//    const qint64 rawBytes = static_cast<qint64>(width) * height;
+//    std::vector<uchar> rawBuffer(static_cast<size_t>(rawBytes));
+
+//    for(int i = 0; i < fileList.size(); i++)
+//    {
+//        const QFileInfo& fi = fileList[i];
+//        QFile file(fi.absoluteFilePath());
+
+//        if(!file.open(QIODevice::ReadOnly))
+//        {
+//            qCritical() << "Fail to open: " << fi.absolutePath();
+//            // TODO
+//            // handle error
+//            ffmpeg.kill();
+//            ffmpeg.waitForFinished();
+//            return;
+//        }
+
+//        qint64 readBytes = file.read(reinterpret_cast<char*>(rawBuffer.data()), rawBytes);
+//        file.close();
+
+//        if(readBytes != rawBytes)
+//        {
+//            qCritical() << "Fail to read raw file : "
+//                        << fi.fileName()
+//                        << "read = " << readBytes
+//                        << "expected = " << rawBytes;
+
+//            // TODO
+//            // handle error
+//            ffmpeg.kill();
+//            ffmpeg.waitForFinished();
+//            return;
+//        }
+
+//        // 1채널 Bayer BGGR 8bit
+//        cv::Mat bayer(height, width, CV_8UC1, rawBuffer.data());
+
+//        // Bayer -> BGR
+//        cv::Mat bgr;
+//        cv::cvtColor(bayer, bgr, cv::COLOR_BayerBG2BGR);
+
+//        if (bgr.empty() || bgr.type() != CV_8UC3) {
+//            qCritical() << "BGR 변환 실패:" << fi.fileName();
+//            // TODO
+//            ffmpeg.kill();
+//            ffmpeg.waitForFinished();
+//            return;
+//        }
+
+//        if (!bgr.isContinuous()) {
+//            bgr = bgr.clone();
+//        }
+
+//        const char* dataPtr = reinterpret_cast<const char*>(bgr.data);
+//        const qint64 bytesToWrite = static_cast<qint64>(bgr.total() * bgr.elemSize());
+
+//        qint64 written = 0;
+//        while (written < bytesToWrite) {
+//            qint64 chunk = ffmpeg.write(dataPtr + written, bytesToWrite - written);
+//            if (chunk < 0) {
+//                qCritical() << "ffmpeg stdin 쓰기 실패:" << fi.fileName();
+//                // TODO
+//                // handle error
+//                ffmpeg.kill();
+//                ffmpeg.waitForFinished();
+//                return;
+//            }
+//            written += chunk;
+
+//            if (!ffmpeg.waitForBytesWritten(-1)) {
+//                qCritical() << "ffmpeg stdin flush 실패:" << fi.fileName();
+//                qCritical() << "state =" << ffmpeg.state();
+//                qCritical() << "exitCode =" << ffmpeg.exitCode();
+//                qCritical() << "error =" << ffmpeg.errorString();
+//                qCritical().noquote() << "stderr:\n" << ffmpeg.readAllStandardError();
+//                // TODO
+//                // handle error
+//                ffmpeg.kill();
+//                ffmpeg.waitForFinished();
+//                return;
+//            }
+//        }
+
+//        qInfo() << QString("프레임 %1/%2 처리 완료: %3")
+//                       .arg(i + 1)
+//                       .arg(fileList.size())
+//                       .arg(fi.fileName());
+//    }
+
+    const qint64 rawBytes = static_cast<qint64>(width) * height * 3;
+    std::vector<uchar> rawBuffer(static_cast<size_t>(rawBytes));
+
+    for (int i = 0; i < fileList.size(); i++)
+    {
+        const QFileInfo& fi = fileList[i];
+        QFile file(fi.absoluteFilePath());
+
+        if (!file.open(QIODevice::ReadOnly))
+        {
+            qCritical() << "Fail to open: " << fi.absoluteFilePath();
+            ffmpeg.kill();
+            ffmpeg.waitForFinished();
+            return;
+        }
+
+        qint64 readBytes = file.read(reinterpret_cast<char*>(rawBuffer.data()), rawBytes);
+        file.close();
+
+        if (readBytes != rawBytes)
+        {
+            qCritical() << "Fail to read raw file : "
+                        << fi.fileName()
+                        << "read =" << readBytes
+                        << "expected =" << rawBytes;
+            ffmpeg.kill();
+            ffmpeg.waitForFinished();
+            return;
+        }
+
+        // 3채널 BGR8 raw
+        cv::Mat bgr(height, width, CV_8UC3, rawBuffer.data());
+
+        if (bgr.empty() || bgr.type() != CV_8UC3)
+        {
+            qCritical() << "BGR 데이터 생성 실패:" << fi.fileName();
+            ffmpeg.kill();
+            ffmpeg.waitForFinished();
+            return;
+        }
+
+        if (!bgr.isContinuous())
+        {
+            bgr = bgr.clone();
+        }
+
+        const char* dataPtr = reinterpret_cast<const char*>(bgr.data);
+        const qint64 bytesToWrite = static_cast<qint64>(bgr.total() * bgr.elemSize());
+
+        qint64 written = 0;
+        while (written < bytesToWrite)
+        {
+            qint64 chunk = ffmpeg.write(dataPtr + written, bytesToWrite - written);
+            if (chunk < 0)
+            {
+                qCritical() << "ffmpeg stdin 쓰기 실패:" << fi.fileName();
+                ffmpeg.kill();
+                ffmpeg.waitForFinished();
+                return;
+            }
+            written += chunk;
+
+            if (!ffmpeg.waitForBytesWritten(-1))
+            {
+                qCritical() << "ffmpeg stdin flush 실패:" << fi.fileName();
+                qCritical() << "state =" << ffmpeg.state();
+                qCritical() << "exitCode =" << ffmpeg.exitCode();
+                qCritical() << "error =" << ffmpeg.errorString();
+                qCritical().noquote() << "stderr:\n" << ffmpeg.readAllStandardError();
+                ffmpeg.kill();
+                ffmpeg.waitForFinished();
+                return;
+            }
+        }
+
+        qInfo() << QString("프레임 %1/%2 처리 완료: %3")
+                       .arg(i + 1)
+                       .arg(fileList.size())
+                       .arg(fi.fileName());
+    }
+
+    ffmpeg.closeWriteChannel();
+
+    if(!ffmpeg.waitForFinished(-1))
+    {
+        qCritical() << "ffmpeg failed to wait for termination";
+        return;
+    }
+
+    QByteArray stdOut = ffmpeg.readAllStandardOutput();
+    QByteArray stdErr = ffmpeg.readAllStandardError();
+
+
+    if (!stdOut.isEmpty()) {
+        qInfo().noquote() << "ffmpeg stdout:\n" << QString::fromLocal8Bit(stdOut);
+    }
+    if (!stdErr.isEmpty()) {
+        qInfo().noquote() << "ffmpeg stderr:\n" << QString::fromLocal8Bit(stdErr);
+    }
+
+    if (ffmpeg.exitCode() != 0) {
+        qCritical() << "ffmpeg 인코딩 실패. exitCode =" << ffmpeg.exitCode();
+        return;
+    }
+
+    qInfo() << "완료:" << outputPath;
+    return;
+}
+
+int VideoWatcher::extractNumber(const QString& fileName)
+{
+    QRegularExpression re("(\\d+)");
+    QRegularExpressionMatch match = re.match(fileName);
+
+    if(match.hasMatch())
+        return match.captured(-1).toInt();
+
+    return -1;
+}
+
+
+void VideoWatcher::deleteFolder(const QString& folderPath)
+{
+    QDir dir(folderPath);
+
+    if (!dir.exists()) {
+        qDebug() << "Don't exit folder : " << dir.dirName();
+        return;
+    }
+
+    bool result = dir.removeRecursively();
+
+    if (result)
+        qDebug() << "Succcess to delete folder";
+    else
+        qDebug() << "삭제 실패";
 }
 
 

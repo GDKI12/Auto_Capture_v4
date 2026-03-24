@@ -30,6 +30,7 @@ void TCPHandler::connectToServer()
 void TCPHandler::onConnected()
 {
     qDebug() << "connected to server";
+    sendVideo("/home/tesla/cho/accident_2.mp4");
 }
 
 void TCPHandler::onDisconnected()
@@ -44,13 +45,13 @@ void TCPHandler::sendVideo(QString path)
         return;
     }
 
-    QString videoPath = "/home/tesla/cho/accident_2.mp4";
+//    QString videoPath = "/home/tesla/cho/accident_2.mp4";
 
     QFile file(path);
 
     if(!file.open(QIODevice::ReadOnly))
     {
-        qWarning() << "Cannot nopen video file: " << videoPath;
+        qWarning() << "Cannot nopen video file: " << path;
         return;
     }
 
@@ -85,7 +86,7 @@ void TCPHandler::sendVideo(QString path)
     }
 
     m_socket.flush();
-    qDebug() << "Video sent:" << videoPath << "size:" << fileSize;
+    qDebug() << "Video sent:" << path << "size:" << fileSize;
 
 }
 

@@ -6,6 +6,8 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QJsonObject>
+#include <QProcess>
+#include <QFileInfoList>
 
 #include "tcpHandler.h"
 
@@ -14,8 +16,11 @@ class VideoWatcher : public QObject
     Q_OBJECT
 public:
     static VideoWatcher& getInstance();
-    void setWatcher(QString);
-    void encode(QString path);
+    void setWatcher();
+    bool mergeRawFiles(const QString& inputDir, const QString& mergedRawPath);
+    bool encodeMergedRawToH265(const QString& ffmpegPath, const QString& mergedRawPath, const QString& outputVideoPath,
+                               int width, int height, int fps, const QString& pixelFormat);
+    void createVideo(const QString& inputDir, const QString& outputPath);
 private:
     explicit VideoWatcher(QObject* parent);
 
@@ -25,17 +30,17 @@ private:
     void dirChanged(const QString& path);
 
     void process();
-    void convertRAWtoPNG();
-
+    void deleteFolder(const QString&);
     bool isReady(QString);
+
+    int extractNumber(const QString&);
+
 
 
 signals:
     void completeConvert(QString);
     void requestSend(QString);
 
-private slots:
-    void createVideo(QString);
 
 private:
     QFileSystemWatcher* watcher;

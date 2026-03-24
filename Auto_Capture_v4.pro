@@ -2,7 +2,7 @@ QT       += core gui network
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
-CONFIG += c++11
+CONFIG += c++17
 
 # The following define makes your compiler emit warnings if you use
 # any Qt feature that has been marked deprecated (the exact warnings
@@ -21,9 +21,16 @@ INCLUDEPATH += /home/tesla/3rdparty/toml11
 ### opencv-4.5.1
 INCLUDEPATH += /usr/local/include/opencv4
 
+### iceoryx - v2.90.0
+INCLUDEPATH += /usr/local/include/iceoryx/v2.90.0
+
 LIBS += -L/usr/local/lib -lopencv_world
 
+### iceoryx
+LIBS += -L/usr/local/lib -liceoryx_hoofs -liceoryx_platform -liceoryx_posh -liceoryx_posh_config -liceoryx_posh_gateway -liceoryx_posh_roudi
+
 SOURCES += \
+    camworker.cpp \
     config.cpp \
     main.cpp \
     mainwindow.cpp \
@@ -31,7 +38,9 @@ SOURCES += \
     videowatcher.cpp
 
 HEADERS += \
+    camworker.h \
     config.h \
+    define.h \
     mainwindow.h \
     protocol.h \
     tcpHandler.h \
