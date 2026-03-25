@@ -5,6 +5,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <QByteArray>
 
 const char APP_NAME[] = "iox-subscriber-AutoSave";
 
@@ -20,7 +21,7 @@ struct CamData
     double timestamp;
     uint32_t width;
     uint32_t height;
-    cv::Mat data;
+    QByteArray data;
 };
 
 

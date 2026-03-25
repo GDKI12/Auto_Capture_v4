@@ -10,122 +10,13 @@
 
 VideoWatcher::VideoWatcher(QObject* parent) : QObject(parent)
 {
-
-}
-
-VideoWatcher& VideoWatcher::getInstance()
-{
-    static VideoWatcher instance(nullptr);
-    return instance;
-
-}
-
-void VideoWatcher::setWatcher()
-{
-
     client = new TCPHandler();
 
-    QMap<QString, QString> params = Config::getParmas();
-    convertProgram = params["convScript"];
-    encodeProgram = params["encodeScript"];
-    savePath = params["saveDir"];
-    rootPath = params["rootDir"];
-
-    watcher = new QFileSystemWatcher(this);
-    watcher->addPath(rootPath);
-    QDir dir(rootPath);
-
-    prevFolders = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-
-    connect(watcher, &QFileSystemWatcher::directoryChanged, this, &VideoWatcher::dirChanged);
     connect(this, &VideoWatcher::requestSend, client, &TCPHandler::sendVideo);
 }
 
-bool VideoWatcher::isReady(QString rootPath)
-{
-    QDir rootDir(rootPath);
-
-    // Select Folder which start with cam
-    QStringList dirFilter;
-    dirFilter << "cam*";
-    QStringList subDirs = rootDir.entryList(dirFilter, QDir::Dirs | QDir::NoDotAndDotDot);
-
-    QStringList encFilter;
-    encFilter << "*enc";
-
-    QStringList camFolders;
-
-    for(QString cam : subDirs)
-    {
-        camFolders << rootPath + "/" + cam;
-    }
-
-    for(QString cam : camFolders)
-    {
-        QDir d(cam);
-        int cnt = d.entryList(encFilter, QDir::Files).size();
-
-        if(cnt < 100)
-            return false;
-    }
 
 
-    return true;
-
-}
-
-void VideoWatcher::dirChanged(const QString& path)
-{
-    int x = 0;
-    bool ready = false;
-
-    QDir changedDir(path);
-    QStringList l = changedDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-
-    if(l.size() <= prevFolders.size())
-    {
-        prevFolders = l;
-        return;
-    }
-
-    for(QString d: l)
-    {
-        if(!prevFolders.contains(d))
-        {
-            QString addedPath = path + "/" + d;
-
-            if(!isReady(addedPath))
-                return;
-
-            while(true)
-            {
-                if(x > 5)
-                    break;
-                if(isReady(addedPath))
-                {
-                    ready = true;
-                    break;
-                }
-
-                qDebug() << "Not Ready!! Sleep for 5sec";
-
-                QThread::sleep(5);
-                x++;
-                qDebug() << "Retry " << x;
-
-            }
-
-            if(ready)
-                process();
-        }
-    }
-}
-
-
-void VideoWatcher::process()
-{
-    qDebug() << "changed!";
-}
 
 
 // Slot : After convert raw to png

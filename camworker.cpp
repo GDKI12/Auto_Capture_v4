@@ -1,7 +1,7 @@
 #include "camworker.h"
 #include "config.h"
 
-CamWorker::CamWorker(QObject* parent) : QObject(parent), index1(0), index2(0), index3(0)
+CamWorker::CamWorker(QObject* parent) : QObject(parent), cam1Num(0), cam2Num(0), cam3Num(0)
 {
     QMap<QString, QString> params = Config::getParmas();
 
@@ -16,7 +16,145 @@ CamWorker::CamWorker(QObject* parent) : QObject(parent), index1(0), index2(0), i
     subscriberOptions.queueCapacity = 0U;
     subscriberOptions.queueFullPolicy = iox::popo::QueueFullPolicy::DISCARD_OLDEST_DATA;
 
+    loadSensor();
+    camSubscribers = std::vector<Subscriber<CustomCamDataType>*>(camNameList.size());
 
+    for(unsigned long i = 0; i < camNameList.size(); i++)
+    {
+        std::string tmp_cam = "cam";
+        std::string tmp_num = std::to_string(i+1);
+        tmp_cam += tmp_num;
+        char result[100];
+        strcpy (result, tmp_cam.c_str());
+        iox::capro::IdString_t service{result};
+
+        Subscriber<CustomCamDataType> *camSubscriber = new Subscriber<CustomCamDataType>({service, "Data", "Image"}, subscriberOptions);
+        camSubscribers.at(i) = camSubscriber;
+    }
+
+    initFFmpeg();
+}
+
+CamWorker::~CamWorker()
+{
+    if (ffmpeg[0].state() == QProcess::Running)
+        stopFFmpeg(0);
+
+    if (ffmpeg[1].state() == QProcess::Running)
+        stopFFmpeg(1);
+
+    if (ffmpeg[2].state() == QProcess::Running)
+        stopFFmpeg(2);
+}
+void CamWorker::receiveGrabFrame()
+{
+    double qTimestamp = QDateTime::currentMSecsSinceEpoch();
+    QString strTimestamp = QString::number(qTimestamp, 'f', 0);
+
+    for(int i = 0; i < camSubscribers.size(); i++)
+    {
+        if(cam1Num >= videoLength && cam2Num >= videoLength && cam3Num >= videoLength)
+        {
+            cam1Num = 0;
+            cam2Num = 0;
+            cam3Num = 0;
+            emit done();
+            return;
+        }
+        Subscriber<CustomCamDataType> *camSubscriber = camSubscribers[i];
+
+        if(cam1Num == 50)
+            std::cout << "";
+
+        if(cam1Num >= videoLength && i == 0)
+            continue;
+
+        if(cam2Num >= videoLength && i == 1)
+            continue;
+
+        if(cam3Num >= videoLength && i == 2)
+            continue;
+
+
+        auto camTakeResult = camSubscriber->take();
+        if (!camTakeResult.has_error())
+        {
+            CamData inputData;
+
+            // Handle received data
+            inputData.timestamp = camTakeResult.value()->timestamp;
+            inputData.height = camTakeResult.value()->height;
+            inputData.width = camTakeResult.value()->width;
+
+            int dataSize = static_cast<int>(inputData.height * inputData.width * 3);
+
+            inputData.data = QByteArray(reinterpret_cast<const char*>(camTakeResult.value()->data), dataSize);
+
+            pushFrameToFFmpeg(inputData, i);
+//            saveRawFile(inputData, i);
+
+        }
+        else
+        {
+            //! [error]
+            if (camTakeResult.get_error() == iox::popo::ChunkReceiveResult::NO_CHUNK_AVAILABLE)
+            {
+//                    std::cout << "CAM" << i+1 << "] No chunk available." << std::endl;
+            }
+            else
+            {
+                std::cout << "CAM" << i+1 << "] Error receiving chunk." << std::endl;
+            }
+            //! [error]
+        }
+
+    }
+}
+
+
+// FLIR_BFS_PGE_32S4C_C_camera_data
+int CamWorker::saveRawFile(CamData data, int index)
+{
+    switch (index) {
+    case 1:
+        cam1Num++;
+        break;
+    case 2:
+        cam2Num++;
+        break;
+    case 3:
+        cam3Num++;
+        break;
+    default:
+        break;
+    }
+    qDebug() << "Save frame cam" << index << endl;
+    QString timeStamp = QString::number(data.timestamp, 'f', 0);
+
+    QString rootDir = savePath + "/cam" + QString::number(index) + "/";
+
+    QDir().mkpath(rootDir);
+
+    QString rawFileName = rootDir + timeStamp + ".raw";
+
+    QFile file(rawFileName);
+
+    if(!file.open(QIODevice::WriteOnly))
+    {
+        // TODO
+        // Handle Error
+        std::cout << "Can not open file: " << rawFileName.toStdString() << std::endl;
+    }
+
+    file.write(reinterpret_cast<const char*>(data.data.constData()), data.width * data.height);
+    std::cout << "Success to save file : " << rawFileName.toStdString() << std::endl;
+    file.close();
+
+    return 0;
+}
+
+void CamWorker::loadSensor()
+{
     QString sensorListFileName = Config::getSensorListFile();
     QFile sensorListFile(sensorListFileName);
 
@@ -41,131 +179,129 @@ CamWorker::CamWorker(QObject* parent) : QObject(parent), index1(0), index2(0), i
 
         camNameList.push_back(sensorName);
     }
-
-    camSubscribers = std::vector<Subscriber<CustomCamDataType>*>(camNameList.size());
-    inputData = std::vector<CustomCamDataType *>(camNameList.size());
-
-    for (unsigned long i = 0; i < camNameList.size(); i++)
-    {
-        inputData[i] = new CustomCamDataType();
-    }
-
-    for(unsigned long i = 0; i < camNameList.size(); i++)
-    {
-        std::string tmp_cam = "cam";
-        std::string tmp_num = std::to_string(i+1);
-        tmp_cam += tmp_num;
-        char result[100];
-        strcpy (result, tmp_cam.c_str());
-        iox::capro::IdString_t service{result};
-
-        Subscriber<CustomCamDataType> *camSubscriber = new Subscriber<CustomCamDataType>({service, "Data", "Image"}, subscriberOptions);
-        camSubscribers.at(i) = camSubscriber;
-    }
-
 }
 
-
-void CamWorker::receiveGrabFrame()
+void CamWorker::startFFmpeg(int index)
 {
+    QString frameSize = "2048x1536";
     double qTimestamp = QDateTime::currentMSecsSinceEpoch();
     QString strTimestamp = QString::number(qTimestamp, 'f', 0);
 
-    for(int i = 0; i < camSubscribers.size(); i++)
-    {
-        if(index1 >= videoLength && index2 >= videoLength && index3 >= videoLength)
-        {
-            index1 = 0;
-            index2 = 0;
-            index3 = 0;
-            emit done();
-        }
-        Subscriber<CustomCamDataType> *camSubscriber = camSubscribers[i];
+    QStringList args;
 
-        if(index1 == 50)
-            std::cout << "" <<std::endl;
-
-        if(index1 >= videoLength && i == 0)
-            continue;
-
-        if(index2 >= videoLength && i == 1)
-            continue;
-
-        if(index3 >= videoLength && i == 2)
-            continue;
+    args << "-y"
+         << "-f" << "rawvideo"
+         << "-pix_fmt" << "bgr24"
+         << "-s" << frameSize
+         << "-r" << "10"
+         << "-i" << "-"
+         << "-an"
+         << "-vf" << "format=yuv420p"
+         << "-c:v" << "libx265"
+         << "-preset" << "ultrafast"
+         << "-tune" << "zerolatency"
+         << "-crf" << "28"
+         << "-f" << "mpegts"
+         << QString("tcp://1.223.191.187:%1").arg(5000 + index);
 
 
-        auto camTakeResult = camSubscriber->take();
-        if (!camTakeResult.has_error())
-        {
-            // 수신한 이미지 데이터를 처리합니다.
-            inputData[i]->timestamp = camTakeResult.value()->timestamp;
-            inputData[i]->height = camTakeResult.value()->height;
-            inputData[i]->width = camTakeResult.value()->width;
-            std::memcpy(inputData[i]->data, camTakeResult.value()->data, sizeof(inputData[i]->data));
+    ffmpeg[index].setProgram("ffmpeg");
+    ffmpeg[index].setArguments(args);
+    ffmpeg[index].start();
 
-            std::cout << "=== CAM" << i+1 << "]" << APP_NAME << "[" << strTimestamp.toStdString() << "] - get value1: "
-                      << QString::number(camTakeResult.value()->timestamp, 'f', 0).toStdString() << std::endl;
-
-            QFuture<int> cycle = QtConcurrent::run(this, &CamWorker::saveRawFile, inputData[i], i+1);
-        }
-        else
-        {
-            //! [error]
-            if (camTakeResult.get_error() == iox::popo::ChunkReceiveResult::NO_CHUNK_AVAILABLE)
-            {
-//                    std::cout << "CAM" << i+1 << "] No chunk available." << std::endl;
-            }
-            else
-            {
-                std::cout << "CAM" << i+1 << "] Error receiving chunk." << std::endl;
-            }
-            //! [error]
-        }
-
+    if (!ffmpeg[index].waitForStarted()) {
+        qCritical() << "ffmpeg start 실패";
     }
+
 }
 
-
-// FLIR_BFS_PGE_32S4C_C_camera_data
-int CamWorker::saveRawFile(CustomCamDataType* data, int index)
+void CamWorker::stopFFmpeg(int index)
 {
-    switch (index) {
-    case 1:
-        index1++;
-        break;
-    case 2:
-        index2++;
-        break;
-    case 3:
-        index3++;
-        break;
-    default:
-        break;
+    ffmpeg[index].closeWriteChannel();
+
+    if (!ffmpeg[index].waitForFinished(-1)) {
+        qCritical() << "ffmpeg 종료 실패";
     }
 
-    QString timeStamp = QString::number(data->timestamp, 'f', 0);
-
-    QString rootDir = savePath + "/cam" + QString::number(index) + "/";
-
-    QDir().mkpath(rootDir);
-
-    QString rawFileName = rootDir + timeStamp + ".raw";
-
-    QFile file(rawFileName);
-
-    if(!file.open(QIODevice::WriteOnly))
-    {
-        // TODO
-        // Handle Error
-        std::cout << "Can not open file: " << rawFileName.toStdString() << std::endl;
+    if (ffmpeg[index].exitCode() != 0) {
+        qCritical() << "인코딩 실패";
     }
-
-    file.write(reinterpret_cast<const char*>(data->data), data->width * data->height);
-    std::cout << "Success to save file : " << rawFileName.toStdString() << std::endl;
-    file.close();
-
-    return 0;
 }
 
+void CamWorker::initFFmpeg()
+{
+    if (ffmpeg[0].state() == QProcess::Running)
+        stopFFmpeg(0);
 
+    if (ffmpeg[1].state() == QProcess::Running)
+        stopFFmpeg(1);
+
+    if (ffmpeg[2].state() == QProcess::Running)
+        stopFFmpeg(2);
+
+    startFFmpeg(0);
+    startFFmpeg(1);
+    startFFmpeg(2);
+}
+void CamWorker::pushFrameToFFmpeg(CamData data, int index)
+{
+
+    if (index < 0 || index >= 3)
+    {
+        qCritical() << "잘못된 ffmpeg index:" << index;
+        return;
+    }
+
+    if (ffmpeg[index].state() != QProcess::Running)
+    {
+        qCritical() << "ffmpeg process not running:" << index;
+        return;
+    }
+
+    if (index == 0) ++cam1Num;
+    else if (index == 1) ++cam2Num;
+    else if (index == 2) ++cam3Num;
+
+    const int width = data.width;
+    const int height = data.height;
+
+    if (width <= 0 || height <= 0)
+    {
+        qCritical() << "잘못된 frame 크기:" << width << height;
+        return;
+    }
+
+
+    const qint64 expectedBytes = static_cast<qint64>(width) * height * 3;
+    if (data.data.size() < expectedBytes)
+    {
+        qCritical() << "입력 데이터 크기 부족:"
+                    << "expected =" << expectedBytes
+                    << ", actual =" << data.data.size();
+        return;
+    }
+
+    const char* ptr = data.data.constData();
+    const qint64 totalBytes = expectedBytes;
+
+    qint64 written = 0;
+    while (written < totalBytes)
+    {
+       const qint64 n = ffmpeg[index].write(ptr + written, totalBytes - written);
+       if (n <= 0)
+       {
+           qCritical() << "ffmpeg write 실패:"
+                       << ffmpeg[index].errorString();
+           return;
+       }
+
+       written += n;
+
+       if (!ffmpeg[index].waitForBytesWritten(3000))
+       {
+           qCritical() << "ffmpeg flush 실패:"
+                       << ffmpeg[index].errorString();
+           return;
+       }
+    }
+}

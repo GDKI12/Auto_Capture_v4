@@ -28,13 +28,19 @@ class CamWorker : public QObject
     Q_OBJECT
 public:
     explicit CamWorker(QObject* parent = nullptr);
-
+    ~CamWorker();
+    void pushFrameToFFmpeg(CamData data, int index);
+    void startFFmpeg(int index);
+    void stopFFmpeg(int idex);
+    void initFFmpeg();
+private:
+    void loadSensor();
 signals:
     void done();
 
 public slots:
     void receiveGrabFrame();
-    int saveRawFile(CustomCamDataType* data, int index);
+    int saveRawFile(CamData data, int index);
 
 private:
     PoshRuntime* runtime;
@@ -47,9 +53,11 @@ private:
     int videoLength;
     QString savePath;
 
-    int index1;
-    int index2;
-    int index3;
+    int cam1Num;
+    int cam2Num;
+    int cam3Num;
+
+    QProcess ffmpeg[3];
 };
 
 #endif // CAMWORKER_H
