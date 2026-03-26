@@ -67,13 +67,22 @@ void CamWorker::receiveGrabFrame()
             std::cout << "";
 
         if(cam1Num >= videoLength && i == 0)
+        {
+            qDebug() << "Received CAM1 frame :" << videoLength;
             continue;
+        }
 
         if(cam2Num >= videoLength && i == 1)
+        {
+            qDebug() << "Received CAM2 frame :" << videoLength;
             continue;
+        }
 
         if(cam3Num >= videoLength && i == 2)
+        {
+            qDebug() << "Received CAM3 frame :" << videoLength;
             continue;
+        }
 
 
         auto camTakeResult = camSubscriber->take();
@@ -220,12 +229,14 @@ void CamWorker::stopFFmpeg(int index)
     ffmpeg[index].closeWriteChannel();
 
     if (!ffmpeg[index].waitForFinished(-1)) {
-        qCritical() << "ffmpeg 종료 실패";
+        qCritical() << " Fail to terminate ffmpeg";
     }
 
     if (ffmpeg[index].exitCode() != 0) {
-        qCritical() << "인코딩 실패";
+        qCritical() << "Fail to ffmpeg";
     }
+
+    qDebug() << "[Client] Success to Send CAM" << index << "Video";
 }
 
 void CamWorker::initFFmpeg()
@@ -248,7 +259,7 @@ void CamWorker::pushFrameToFFmpeg(CamData data, int index)
 
     if (index < 0 || index >= 3)
     {
-        qCritical() << "잘못된 ffmpeg index:" << index;
+        qCritical() << "Wrong ffmpeg index:" << index;
         return;
     }
 
@@ -267,7 +278,7 @@ void CamWorker::pushFrameToFFmpeg(CamData data, int index)
 
     if (width <= 0 || height <= 0)
     {
-        qCritical() << "잘못된 frame 크기:" << width << height;
+        qCritical() << "Wrong frame size:" << width << height;
         return;
     }
 
@@ -275,7 +286,7 @@ void CamWorker::pushFrameToFFmpeg(CamData data, int index)
     const qint64 expectedBytes = static_cast<qint64>(width) * height * 3;
     if (data.data.size() < expectedBytes)
     {
-        qCritical() << "입력 데이터 크기 부족:"
+        qCritical() << "Insufficient input data size:"
                     << "expected =" << expectedBytes
                     << ", actual =" << data.data.size();
         return;
@@ -290,7 +301,7 @@ void CamWorker::pushFrameToFFmpeg(CamData data, int index)
        const qint64 n = ffmpeg[index].write(ptr + written, totalBytes - written);
        if (n <= 0)
        {
-           qCritical() << "ffmpeg write 실패:"
+           qCritical() << "Failt to write ffmpeg :"
                        << ffmpeg[index].errorString();
            return;
        }
@@ -299,7 +310,7 @@ void CamWorker::pushFrameToFFmpeg(CamData data, int index)
 
        if (!ffmpeg[index].waitForBytesWritten(3000))
        {
-           qCritical() << "ffmpeg flush 실패:"
+           qCritical() << "Fail to flush ffmpeg flush :"
                        << ffmpeg[index].errorString();
            return;
        }

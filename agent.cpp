@@ -14,9 +14,10 @@ Agent::Agent(QObject* parent) : QObject(parent)
 
     QObject::connect(camWorker, &CamWorker::done, timer, [this]() {
         timer->stop();
-        std::cout << "Start to Create Video" << std::endl;
+        qDebug() << "[Client] Start to Create Video";
         camWorker->initFFmpeg();
 
+        qDebug() << "[Client] Wait for 6000ms to send video";
         QTimer::singleShot(60000, timer, [this]() {
             timer->start();
         });
