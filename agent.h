@@ -12,6 +12,8 @@
 #include "config.h"
 #include "camworker.h"
 
+
+
 class Agent : public QObject
 {
     Q_OBJECT

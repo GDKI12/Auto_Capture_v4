@@ -13,6 +13,7 @@
 #include <QDateTime>
 #include <QFuture>
 #include <QtConcurrent>
+#include <QElapsedTimer>
 #include "iceoryx_posh/popo/subscriber.hpp"
 #include "iceoryx_posh/popo/untyped_subscriber.hpp"
 #include "iceoryx_posh/runtime/posh_runtime.hpp"
@@ -29,7 +30,9 @@ class CamWorker : public QObject
 public:
     explicit CamWorker(QObject* parent = nullptr);
     ~CamWorker();
-    void pushFrameToFFmpeg(CamData data, int index);
+    void pushFrameToFFmpegLive(CamData data, int index);
+    void pushFrameToFFmpegFile(const QString& rawPath, int index);
+
     void startFFmpeg(int index);
     void stopFFmpeg(int idex);
     void initFFmpeg();
@@ -40,22 +43,26 @@ signals:
 
 public slots:
     void receiveGrabFrame();
-    int saveRawFile(CamData data, int index);
 
 private:
+    QElapsedTimer pTimer;
     PoshRuntime* runtime;
     std::vector<Subscriber<CustomCamDataType> *> camSubscribers;
     std::vector<QString> camNameList;
     std::vector<CustomCamDataType *> inputData;
 
+    std::vector<std::queue<QString>> camsData;
+
     std::queue<int> images;
     int timeInteval;
     int videoLength;
-    QString savePath;
+    QString filePath;
 
     int cam1Num;
     int cam2Num;
     int cam3Num;
+
+    bool mode;
 
     QProcess ffmpeg[3];
 };

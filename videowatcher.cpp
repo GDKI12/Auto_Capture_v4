@@ -10,9 +10,7 @@
 
 VideoWatcher::VideoWatcher(QObject* parent) : QObject(parent)
 {
-    client = new TCPHandler();
 
-    connect(this, &VideoWatcher::requestSend, client, &TCPHandler::sendVideo);
 }
 
 

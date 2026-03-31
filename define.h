@@ -27,7 +27,7 @@ struct CamData
 
 enum class Mode
 {
-    CONTINUOUS, SPLIT
+    LIVE, FILE
 };
 
 #endif // DEFINE_H

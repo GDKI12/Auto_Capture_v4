@@ -34,19 +34,12 @@ SOURCES += \
     camworker.cpp \
     config.cpp \
     main.cpp \
-    mainwindow.cpp \
-    tcpHandler.cpp \
-    videowatcher.cpp
 
 HEADERS += \
     agent.h \
     camworker.h \
     config.h \
     define.h \
-    mainwindow.h \
-    protocol.h \
-    tcpHandler.h \
-    videowatcher.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

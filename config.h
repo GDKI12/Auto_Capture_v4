@@ -16,6 +16,7 @@ public:
     static QString defaultFile();
     static QMap<QString, QString> getParmas();
     static QString getSensorListFile();
+    static bool getModeType();
 };
 
 #endif // CONFIG_H

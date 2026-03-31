@@ -9,7 +9,6 @@
 #include <QProcess>
 #include <QFileInfoList>
 
-#include "tcpHandler.h"
 
 class VideoWatcher : public QObject
 {
@@ -32,8 +31,6 @@ signals:
     void requestSend(QString);
 
 
-private:
-    TCPHandler* client;
 
 };
 

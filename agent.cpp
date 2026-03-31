@@ -30,3 +30,4 @@ Agent::~Agent()
     camWorker->deleteLater();
     timer->deleteLater();
 }
+
