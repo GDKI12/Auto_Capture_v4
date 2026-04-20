@@ -52,6 +52,8 @@ public:
             width = toml::find<int>(data, "setting", "width");
             height = toml::find<int>(data, "setting", "height");
 
+            rawSize = toml::find<int>(data, "setting", "save_data_time");
+            rawSize *= 1000;
             QFile snesorListFile(SENSOR_LIST_FILE);
 
 
@@ -70,6 +72,7 @@ public:
     int width;
     int height;
     bool mode;
+    int rawSize;
 };
 
 #endif // DEFINE_H

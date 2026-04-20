@@ -28,12 +28,22 @@ public slots:
 private:
     void loadSensor();
     void getConfig();
+
+    //ffmpeg
+    bool startFfmpeg();
+    void stopFfmpeg(bool forceKill);
+    bool writeFrameToFfmpeg(const QString& filePath);
+
     void start();
     void rootScan();
     void sensorMode();
     void requestCreateClip();
     void init();
     void sendClip(const QVector<QString>&);
+
+    // meta info
+    bool ensureMetaSocketConnected();
+    bool sendMetaHeader(const QByteArray& header);
 
 private:
     QString id;
@@ -50,7 +60,7 @@ private:
     bool mode;
     int width;
     int height;
-
+    int rawSize;
     int metaPort;
 
     QQueue<QString> sensorDirs;
@@ -60,9 +70,12 @@ private:
 
     QSet<QString> trashList;
     QString currDir;
-    int frameIndex;
 
     QTcpSocket* socket;
+    QProcess ffmpeg;
+    QByteArray frameBuffer;
+    QString ffmpegUrl;
+    QStringList ffmpegArgs;
 };
 
 #endif // CAMWORKER_H
