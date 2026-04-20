@@ -2,69 +2,67 @@
 #define CAMWORKER_H
 
 #include <QObject>
-#include <iostream>
-#include <QDebug>
-#include <QFile>
-#include <QMap>
-#include <QJsonParseError>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
+#include <QTimer>
+#include <QSet>
+#include <QQueue>
+#include <QVector>
+#include <QFileInfoList>
+#include <QFileSystemWatcher>
+#include <QFileInfo>
+#include <QDir>
+#include <QProcess>
+#include <QTcpSocket>
 #include <QDateTime>
-#include <QFuture>
-#include <QtConcurrent>
-#include <QElapsedTimer>
-#include "iceoryx_posh/popo/subscriber.hpp"
-#include "iceoryx_posh/popo/untyped_subscriber.hpp"
-#include "iceoryx_posh/runtime/posh_runtime.hpp"
 
-#include <queue>
-#include "define.h"
-using namespace iox::runtime;
-using namespace iox::popo;
-
+#include "config.h"
 
 class CamWorker : public QObject
 {
     Q_OBJECT
 public:
-    explicit CamWorker(QObject* parent = nullptr);
+    explicit CamWorker(const QString& camId, const Config& config, QObject* parent = nullptr);
     ~CamWorker();
-    void pushFrameToFFmpegLive(CamData data, int index);
-    void pushFrameToFFmpegFile(const QString& rawPath, int index);
-
-    void startFFmpeg(int index);
-    void stopFFmpeg(int idex);
-    void initFFmpeg();
+public slots:
+    void onFileSystemChanged(const QString& path);
+    void getAnswer(QByteArray data);
 private:
     void loadSensor();
-signals:
-    void done();
-
-public slots:
-    void receiveGrabFrame();
+    void getConfig();
+    void start();
+    void rootScan();
+    void sensorMode();
+    void requestCreateClip();
+    void init();
+    void sendClip(const QVector<QString>&);
 
 private:
-    QElapsedTimer pTimer;
-    PoshRuntime* runtime;
-    std::vector<Subscriber<CustomCamDataType> *> camSubscribers;
-    std::vector<QString> camNameList;
-    std::vector<CustomCamDataType *> inputData;
+    QString id;
+    QFileSystemWatcher watcher;
 
-    std::vector<std::queue<QString>> camsData;
-
-    std::queue<int> images;
-    int timeInteval;
+    QTimer timer;
+    int frames;
+    // setting params
+    QString rootPath;
+    QString dstIp;
+    int dstPort;
+    int timeInterval;
     int videoLength;
-    QString filePath;
-
-    int cam1Num;
-    int cam2Num;
-    int cam3Num;
-
     bool mode;
+    int width;
+    int height;
 
-    QProcess ffmpeg[3];
+    int metaPort;
+
+    QQueue<QString> sensorDirs;
+    QQueue<QString> rawFiles;
+
+    QSet<QString> preSensors;
+
+    QSet<QString> trashList;
+    QString currDir;
+    int frameIndex;
+
+    QTcpSocket* socket;
 };
 
 #endif // CAMWORKER_H

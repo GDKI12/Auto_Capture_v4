@@ -30,16 +30,16 @@ LIBS += -L/usr/local/lib -lopencv_world
 LIBS += -L/usr/local/lib -liceoryx_hoofs -liceoryx_platform -liceoryx_posh -liceoryx_posh_config -liceoryx_posh_gateway -liceoryx_posh_roudi
 
 SOURCES += \
-    agent.cpp \
     camworker.cpp \
-    config.cpp \
     main.cpp \
+    tcphandler.cpp \
+    videohandler.cpp
 
 HEADERS += \
-    agent.h \
     camworker.h \
     config.h \
-    define.h \
+    tcphandler.h \
+    videohandler.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

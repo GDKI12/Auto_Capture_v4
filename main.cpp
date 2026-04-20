@@ -1,15 +1,16 @@
 #include <QCoreApplication>
-#include "agent.h"
-#include "videowatcher.h"
+#include "camworker.h"
+#include "config.h"
+#include <QTcpSocket>
+
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-//    QString inputFolder = "/home/tesla/cscho/result/cam0";
-//    QString outputVideo = "/home/tesla/cscho/output.mp4";
-//    VideoWatcher watcher;
+    Config config;
+    config.loadConfig();
 
-//    watcher.createVideo(inputFolder, outputVideo);
-    Agent agent;
+    CamWorker camWorker("cam1", config);
+
     return a.exec();
 }
