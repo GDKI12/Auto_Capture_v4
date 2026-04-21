@@ -32,14 +32,10 @@ LIBS += -L/usr/local/lib -liceoryx_hoofs -liceoryx_platform -liceoryx_posh -lice
 SOURCES += \
     camworker.cpp \
     main.cpp \
-    tcphandler.cpp \
-    videohandler.cpp
 
 HEADERS += \
     camworker.h \
     config.h \
-    tcphandler.h \
-    videohandler.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

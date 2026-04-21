@@ -22,6 +22,9 @@ class CamWorker : public QObject
 public:
     explicit CamWorker(const QString& camId, const Config& config, QObject* parent = nullptr);
     ~CamWorker();
+
+    bool ensureFfmpegRunning();
+    void stopFfmpeg();
 public slots:
     void onFileSystemChanged(const QString& path);
     void getAnswer(QByteArray data);
@@ -44,13 +47,13 @@ private:
     QString rootPath;
     QString dstIp;
     int dstPort;
+    int metaPort;
     int timeInterval;
     int videoLength;
     bool mode;
     int width;
     int height;
 
-    int metaPort;
 
     QQueue<QString> sensorDirs;
     QQueue<QString> rawFiles;
@@ -62,6 +65,7 @@ private:
     int frameIndex;
 
     QTcpSocket* socket;
+    QProcess* ffmpeg;
 };
 
 #endif // CAMWORKER_H
