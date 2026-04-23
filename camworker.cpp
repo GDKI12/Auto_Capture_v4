@@ -29,10 +29,7 @@ CamWorker::CamWorker(const QString& camId, const Config& config, QObject* parent
     mode = config.mode;    width = config.width;
     height = config.height;
 
-    frames = timeInterval / 100;
-
-
-    connect(&watcher, &QFileSystemWatcher::directoryChanged, this, &CamWorker::onFileSystemChanged);
+    frames = timeInterval / 100;    connect(&watcher, &QFileSystemWatcher::directoryChanged, this, &CamWorker::onFileSystemChanged);
 
     init();
 
@@ -326,6 +323,8 @@ void CamWorker::sendClip(const QVector<QString>& clips)
           return;
       }
 
+      stopFfmpeg();
+
       qDebug() << "cam" << id << " complete ffmpeg encoding";
       qDebug() << "queue size : " << rawFiles.size();
       qDebug() << "current dir : " << currDir;
@@ -334,6 +333,10 @@ void CamWorker::sendClip(const QVector<QString>& clips)
 
 void CamWorker::getAnswer(QByteArray data)
 {
+    if(data.isEmpty())
+    {
+        qDebug() << "VSS Server is not Running";
+    }
     QJsonParseError parseError;
 
     QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
