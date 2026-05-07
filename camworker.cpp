@@ -3,19 +3,31 @@
 #include <QElapsedTimer>
 #include <QThread>
 #include <QAbstractSocket>
+#include <QRegularExpression>
 
 CamWorker::CamWorker(const QString& camId, const Config& config, QObject* parent)
     : QObject(parent), id(camId)
 {
+    outInfo("Start to vss");
+
     socket = new QTcpSocket(this);
     ffmpeg = new QProcess(this);
+
+    connect(this, &CamWorker::outInfo, this, &CamWorker::onWrite);
+    connect(this, &CamWorker::outWarn, this, &CamWorker::onWrite);
+    connect(this, &CamWorker::outError, this, &CamWorker::onWrite);
 
     connect(socket, &QTcpSocket::readyRead, this, [=]()
     {
         QByteArray data = socket->readAll();
-        qDebug() << "Received from server:" << data;
+        QString log = QString("Received from server: %1").arg(QString::fromUtf8(data));
+
+        emit outInfo(log.remove(QRegularExpression("[\r\n]+$")));
+
         getAnswer(data);
     });
+
+
 
     rootPath = config.rootPath;
     dstIp = config.ip;
@@ -39,6 +51,7 @@ CamWorker::CamWorker(const QString& camId, const Config& config, QObject* parent
     connect(&timer, &QTimer::timeout, this, &CamWorker::start);
 
     timer.start();
+
 }
 
 CamWorker::~CamWorker()
@@ -51,6 +64,21 @@ CamWorker::~CamWorker()
     ffmpeg->deleteLater();
 }
 
+void CamWorker::stop()
+{
+    timer.stop();
+
+    if(!socket->isOpen())
+    {
+        socket->flush();
+        socket->disconnectFromHost();
+        socket->waitForDisconnected(-1);
+
+        socket->deleteLater();
+    }
+
+    ffmpeg->deleteLater();
+}
 bool CamWorker::ensureFfmpegRunning()
 {
     if(ffmpeg->state() == QProcess::Running)
@@ -79,7 +107,7 @@ bool CamWorker::ensureFfmpegRunning()
 
     if(!ffmpeg->waitForStarted(3000))
     {
-      qCritical() << "ffmpeg start fail";
+      emit outError("Fail to start ffmpeg (Check the connection with the server)");
       return false;
     }
 
@@ -149,7 +177,8 @@ void CamWorker::onFileSystemChanged(const QString& path)
         for(const QString& f : added)
         {
             QString camDir = QString("%1/%2").arg(f).arg(id);
-            qDebug() << "added folder: " << camDir;
+
+            emit outInfo(QString("Added folder : %1").arg(camDir));
             preSensors.insert(f);
             watcher.addPath(camDir);
         }
@@ -169,10 +198,9 @@ void CamWorker::onFileSystemChanged(const QString& path)
 
 void CamWorker::start()
 {
-    qDebug() << "Start to vss";
     if(sensorDirs.isEmpty() && rawFiles.isEmpty())
     {
-        qDebug() << "No sensorDirs";
+        outInfo("No sensorDirs");
         return;
     }
     if(rawFiles.isEmpty() || rawFiles.size() < videoLength)
@@ -205,7 +233,7 @@ void CamWorker::start()
 
 void CamWorker::requestCreateClip()
 {
-    qDebug() << "Sensor Dir list size " << sensorDirs.size();
+    outInfo(QString("Sensor Dir list size %1").arg(sensorDirs.size()));
     QVector<QString> clips;
 
     for(int i = 0; i < frames; i++)
@@ -235,7 +263,7 @@ void CamWorker::sendClip(const QVector<QString>& clips)
 
     if(!socket->waitForConnected(3000))
     {
-        qCritical() << QString("fail connect to ip : %1 port : %2").arg(dstIp).arg(metaPort);
+        outError(QString("Fail connect to ip : %1 port : %2").arg(dstIp).arg(metaPort));
         return;
     }
 
@@ -253,16 +281,16 @@ void CamWorker::sendClip(const QVector<QString>& clips)
     socket->write(header);
 
     if (!socket->waitForBytesWritten(3000)) {
-        qCritical() << "write fail:" << socket->errorString();
+        outError(QString("Fail to write meta info - %1").arg(socket->errorString()));
         return;
     }
 
     socket->flush();
-
-    qDebug() << "Success to send meta: " << header;
+    QString log = QString("Success to send meta: %1").arg(QString::fromUtf8(header));
+    outInfo(log.remove(QRegularExpression("[\r\n]+$")));
 
     if(!ensureFfmpegRunning())
-              return;
+        return;
 
     qint64 rawBytes = (qint64)width * height;
     QByteArray frame(rawBytes, Qt::Uninitialized);
@@ -280,10 +308,10 @@ void CamWorker::sendClip(const QVector<QString>& clips)
 
         if(readBytes != rawBytes)
         {
-            qCritical() << "Fail to read raw file : "
-                      << in.fileName()
-                      << "read = " << readBytes
-                      << "expected = " << rawBytes;
+            QString log = QString("Fail to read raw file : %1, read = %2, expected = %3")
+                    .arg(in.fileName()).arg(readBytes).arg(rawBytes);
+
+            outError(log);
 
             stopFfmpeg();
             return;
@@ -296,7 +324,7 @@ void CamWorker::sendClip(const QVector<QString>& clips)
           qint64 chunk = ffmpeg->write(frame.constData() + written, frame.size() - written);
           if(chunk < 0)
           {
-              qCritical() << "fail to write to ffmpeg stdin" << in.fileName();
+              outError(QString("[ERROR] Fail to write to ffmpeg stdin %1").arg(in.fileName()));
               stopFfmpeg();
               return;
           }
@@ -304,11 +332,16 @@ void CamWorker::sendClip(const QVector<QString>& clips)
           written += chunk;
           if(!ffmpeg->waitForBytesWritten(-1))
           {
-              qCritical() << "ffmpeg stdin flush 실패:" << in.fileName();
-              qCritical() << "state =" << ffmpeg->state();
-              qCritical() << "exitCode =" << ffmpeg->exitCode();
-              qCritical() << "error =" << ffmpeg->errorString();
-              qCritical().noquote() << "stderr:\n" << ffmpeg->readAllStandardError();
+              qCritical() << "[ERROR] Failt to flush ffmpeg stdin flush:" << in.fileName();
+              qCritical() << "[ERROR] state =" << ffmpeg->state();
+              qCritical() << "[ERROR] exitCode =" << ffmpeg->exitCode();
+              qCritical() << "[ERROR] error =" << ffmpeg->errorString();
+
+              outError(QString("Failt to flush ffmpeg stdin flush : %1").arg(in.fileName()));
+              outError(QString("state = %1").arg(ffmpeg->state()));
+              outError(QString("exitCode = %1").arg(ffmpeg->exitCode()));
+              outError(QString("error = %1").arg(ffmpeg->errorString()));
+
               stopFfmpeg();
               return;
           }
@@ -316,40 +349,44 @@ void CamWorker::sendClip(const QVector<QString>& clips)
     }
 
       qint64 elapsedMs = timer.elapsed();
-      qDebug() << "ffmpeg encoding time(ms):" << elapsedMs;
+      outInfo(QString("ffmpeg encoding time(ms) : %1").arg(elapsedMs));
 
       if (ffmpeg->state() != QProcess::Running) {
-          qCritical() << "ffmpeg stopped unexpectedly. exitCode =" << ffmpeg->exitCode();
+          outError(QString("ffmpeg stopped unexpectedly. exitCode = %1").arg(ffmpeg->exitCode()));
           return;
       }
 
       stopFfmpeg();
 
-      qDebug() << "cam" << id << " complete ffmpeg encoding";
-      qDebug() << "queue size : " << rawFiles.size();
-      qDebug() << "current dir : " << currDir;
+      outInfo(QString("%1 complete ffmpeg encoding").arg(id));
+      outInfo(QString("Raw queue size : %1").arg(rawFiles.size()));
+      outInfo(QString("Current working dir : %1").arg(currDir));
+
       return;
 }
 
 void CamWorker::getAnswer(QByteArray data)
 {
-    if(data.isEmpty())
-    {
-        qDebug() << "VSS Server is not Running";
-    }
     QJsonParseError parseError;
 
     QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
 
     if(parseError.error != QJsonParseError::NoError)
     {
-        qCritical() << "JSON parsing error: " << parseError.errorString();
+        outError(QString("JSON parsing error : %1").arg(parseError.errorString()));
     }
 
     QJsonObject root = doc.object();
 
     QString folderName = root.value("fileName").toString();
     QString answer = root.value("answer").toString();
+
+    if(answer.isEmpty())
+    {
+        outError("VSS Server is not Running");
+        stop();
+        return;
+    }
 
     QString path = rootPath + "/" + folderName;
     if(answer.contains("yes", Qt::CaseInsensitive) || answer.contains("snow", Qt::CaseInsensitive) || answer.contains("rain", Qt::CaseInsensitive))
@@ -376,13 +413,26 @@ void CamWorker::getAnswer(QByteArray data)
         {
             if(removeDir.removeRecursively())
             {
-                qDebug() << "Success to remove folder : " << p;
+                outInfo(QString("Success to remove folder : %1").arg(p));
                 trashList.remove(p);
             }
             else
             {
-                qDebug() << "Failed to remove folder : " << p;
+                outWarn(QString("Failed to remove folder : ").arg(p));
             }
         }
     }
+}
+
+void CamWorker::onWrite(const QString& content, LogLevel level)
+{
+    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss.zzz");
+
+    if(level == LogLevel::INFO)
+        qDebug().noquote() << "\033[32m" << timestamp << "[INFO] " << content;
+    else if(level == LogLevel::WARN)
+        qWarning().noquote() << "\033[33m" << timestamp << "[WARN] " << content;
+    else if(level == LogLevel::ERROR)
+        qCritical().noquote() << "\033[31m" << timestamp << "[ERROR] " << content;
+
 }

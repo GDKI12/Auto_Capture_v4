@@ -20,6 +20,10 @@ const QString DEFAULT_PATH = "/home/tesla/cscho/Auto_Capture_v4/config.toml";
 const QString FILE_NAME = "config.toml";
 const QString SENSOR_LIST_FILE = "/home/tesla/EdgeInfravision/EdgeInfra_Capture_v4/config/sensor_list.json";
 
+enum class LogLevel{
+    INFO, WARN, ERROR
+};
+
 class Config
 {
 public:

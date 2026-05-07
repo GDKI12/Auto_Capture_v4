@@ -25,9 +25,16 @@ public:
 
     bool ensureFfmpegRunning();
     void stopFfmpeg();
+    void stop();
+signals:
+    void outInfo(const QString& info, LogLevel logLevel = LogLevel::INFO);
+    void outWarn(const QString& warn, LogLevel logLevel = LogLevel::WARN);
+    void outError(const QString& error, LogLevel logLevel = LogLevel::ERROR);
+
 public slots:
     void onFileSystemChanged(const QString& path);
     void getAnswer(QByteArray data);
+    void onWrite(const QString& content, LogLevel logLevel);
 private:
     void loadSensor();
     void getConfig();
