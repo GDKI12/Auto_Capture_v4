@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
     Config config;
     config.loadConfig();
 
-    CamWorker camWorker("cam1", config);
+    CamWorker camWorker("cam3", config);
 
     return a.exec();
 }

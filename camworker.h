@@ -26,6 +26,8 @@ public:
     bool ensureFfmpegRunning();
     void stopFfmpeg();
     void stop();
+
+    void showEncoding();
 signals:
     void outInfo(const QString& info, LogLevel logLevel = LogLevel::INFO);
     void outWarn(const QString& warn, LogLevel logLevel = LogLevel::WARN);
@@ -48,7 +50,7 @@ private:
     QString id;
     QFileSystemWatcher watcher;
 
-    QTimer timer;
+//    QTimer timer;
     int frames;
     // setting params
     QString rootPath;
@@ -61,18 +63,23 @@ private:
     int width;
     int height;
 
-
     QQueue<QString> sensorDirs;
     QQueue<QString> rawFiles;
 
     QSet<QString> preSensors;
 
     QSet<QString> trashList;
+    QSet<QString> saveList;
+
     QString currDir;
     int frameIndex;
 
     QTcpSocket* socket;
     QProcess* ffmpeg;
+
+    QVector<qint64> encodingTimes;
+
+    int ctn;
 };
 
 #endif // CAMWORKER_H
