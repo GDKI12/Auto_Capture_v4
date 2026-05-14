@@ -107,8 +107,6 @@ CamWorker::~CamWorker()
 
 void CamWorker::stop()
 {
-//    timer.stop();
-
     if(!socket->isOpen())
     {
         socket->flush();
@@ -441,40 +439,40 @@ void CamWorker::getAnswer(QByteArray data)
         return;
     }
 
-//    QString path = rootPath + "/" + folderName;
+    QString path = rootPath + "/" + folderName;
 
-//    if(hasEvent(answer))
-//    {
-//        saveList.insert(path);
-//        trashList.remove(path);
-//    }
-//    else if(!saveList.contains(path))
-//    {
-//        trashList.insert(path);
-//    }
+    if(hasEvent(answer))
+    {
+        saveList.insert(path);
+        trashList.remove(path);
+    }
+    else if(!saveList.contains(path))
+    {
+        trashList.insert(path);
+    }
 
-//    const QString currentSensorPath = sensorPathFromCamPath(currDir);
-//    const QSet<QString> targets = trashList - saveList;
+    const QString currentSensorPath = sensorPathFromCamPath(currDir);
+    const QSet<QString> targets = trashList - saveList;
 
-//    for(const QString& p : targets)
-//    {
-//        if(p == currentSensorPath && !rawFiles.isEmpty())
-//          continue;
+    for(const QString& p : targets)
+    {
+        if(p == currentSensorPath && !rawFiles.isEmpty())
+          continue;
 
-//    QDir removeDir(p);
-//    if(removeDir.exists())
-//    {
-//        if(removeDir.removeRecursively())
-//        {
-//          emit outInfo(QString("Success to remove folder : %1").arg(p));
-//          trashList.remove(p);
-//        }
-//        else
-//        {
-//          emit outWarn(QString("Failed to remove folder : %1").arg(p));
-//        }
-//    }
-//    }
+    QDir removeDir(p);
+    if(removeDir.exists())
+    {
+        if(removeDir.removeRecursively())
+        {
+          emit outInfo(QString("Success to remove folder : %1").arg(p));
+          trashList.remove(p);
+        }
+        else
+        {
+          emit outWarn(QString("Failed to remove folder : %1").arg(p));
+        }
+    }
+    }
 
     start();
 }
